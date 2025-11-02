@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <title>Калькулятор выплат</title>
+  <title>Калькулятор выплат (точные ставки)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     :root {
@@ -13,7 +13,6 @@
       --accent: #4da3ff;
       --border: #2a2d33;
       --green: #55d66b;
-      --red: #ff5c5c;
     }
     * { box-sizing: border-box; }
     body {
@@ -107,20 +106,6 @@
       opacity: 1;
       transform: translateY(0);
     }
-    .config {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-top: 14px;
-    }
-    .config input {
-      width: 90px;
-      text-align: right;
-    }
-    .config label {
-      font-size: 13px;
-      color: var(--muted);
-    }
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(10px); }
       to { opacity: 1; transform: translateY(0); }
@@ -132,20 +117,17 @@
   </style>
 </head>
 <body>
-  <h1>Калькулятор выплат</h1>
+  <h1>Калькулятор выплат (точные ставки)</h1>
   <div class="card">
-    <div class="muted">Введите количество поездок. Если меньше 250 — оплата не начисляется.</div>
+    <div class="muted">Введите количество поездок. Если всего ≥ 250 — расчёт пойдёт ступенчато по таблице ставок.</div>
     <label for="trips">Количество поездок:</label>
     <input id="trips" type="number" min="0" placeholder="например, 380">
-    <div class="config">
-      <label>Порог: <input id="threshold" type="number" min="0" value="250"></label>
-      <label>Вычет (%): <input id="deduct" type="number" min="0" max="100" value="8"></label>
-    </div>
-    <div id="result" class="fade"></div>
+    <div id="result" class="fade" style="margin-top:16px;"></div>
   </div>
 
   <script>
-    const defaultTiers = [
+    const threshold = 250;
+    const tiers = [
       {start: 1, end: 299, rate: 1.70},
       {start: 300, end: 399, rate: 1.80},
       {start: 400, end: 499, rate: 2.00},
@@ -153,72 +135,61 @@
       {start: 600, end: Infinity, rate: 2.50}
     ];
 
-    function format(n) {
-      return new Intl.NumberFormat('ru-RU', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-      }).format(n);
-    }
-
-    function calculate(n, threshold, deductionPercent) {
+    function calculate(n) {
       n = Math.floor(Number(n) || 0);
-      if (n < threshold) return {paid: false, total: 0, breakdown: [], after: 0};
+      if (n < threshold) {
+        return {paid: false, total: 0, breakdown: [], after8: 0};
+      }
       let total = 0;
       const breakdown = [];
-      for (const t of defaultTiers) {
+      for (const t of tiers) {
         const lower = Math.max(t.start, 1);
         const upper = Math.min(n, t.end);
         if (upper >= lower) {
           const count = upper - lower + 1;
-          const sum = count * t.rate;
+          const sum = +(count * t.rate).toFixed(2);
           total += sum;
           breakdown.push({
-            range: (t.end === Infinity ? `${t.start}+` : `${t.start}–${t.end}`),
+            range: t.start + "–" + (t.end === Infinity ? (">= " + t.start) : t.end),
             count, rate: t.rate, sum
           });
         }
         if (upper === n) break;
       }
-      total = Math.round(total * 100) / 100;
-      const after = Math.round(total * (1 - deductionPercent / 100) * 100) / 100;
-      return {paid: true, total, breakdown, after};
+      total = +total.toFixed(2);
+      const after8 = +(total * 0.92).toFixed(2);
+      return {paid: true, total, breakdown, after8};
     }
 
-    function render(res, n, threshold, deductionPercent) {
+    function render(res, n) {
       const div = document.getElementById('result');
       div.classList.remove('show');
-      if (!n) { div.innerHTML = ''; return; }
       if (!res.paid) {
-        div.innerHTML = `<div class="muted big">Поездок: ${n} — меньше ${threshold}.<br>Оплата не начисляется.</div>`;
+        if (!n) { div.innerHTML = ''; return; }
+        div.innerHTML = `<div class="muted big">Всего поездок: ${n} — меньше ${threshold}.<br>Оплата не начисляется.</div>`;
         requestAnimationFrame(() => div.classList.add('show'));
         return;
       }
+
       let html = `<div class="muted">Всего поездок: <b>${n}</b></div>`;
       html += `<table><thead><tr><th>Диапазон</th><th>Кол-во</th><th>Ставка (PLN)</th><th class="right">Сумма (PLN)</th></tr></thead><tbody>`;
       for (const b of res.breakdown) {
-        html += `<tr><td>${b.range}</td><td>${b.count}</td><td>${format(b.rate)}</td><td class="right">${format(b.sum)}</td></tr>`;
+        html += `<tr><td>${b.range}</td><td>${b.count}</td><td>${b.rate.toFixed(2)}</td><td class="right">${b.sum.toFixed(2)}</td></tr>`;
       }
       html += `</tbody></table>`;
-      html += `<div class="big">Общая сумма: <span class="ok">${format(res.total)} PLN</span></div>`;
-      html += `<div class="muted">Вычет ${deductionPercent}%: ${format(res.total - res.after)} PLN</div>`;
-      html += `<div class="big">Итого после вычета: <span class="ok">${format(res.after)} PLN</span></div>`;
+      html += `<div class="big">Общая сумма: <span class="ok">${res.total.toFixed(2)} PLN</span></div>`;
+      html += `<div class="muted">Вычесть 8%: ${(res.total - res.after8).toFixed(2)} PLN</div>`;
+      html += `<div class="big">Итого после вычета 8%: <span class="ok">${res.after8.toFixed(2)} PLN</span></div>`;
+
       div.innerHTML = html;
       requestAnimationFrame(() => div.classList.add('show'));
     }
 
-    const trips = document.getElementById('trips');
-    const threshold = document.getElementById('threshold');
-    const deduct = document.getElementById('deduct');
-
-    function recalc() {
-      const n = Number(trips.value);
-      const th = Number(threshold.value);
-      const ded = Number(deduct.value);
-      const res = calculate(n, th, ded);
-      render(res, n, th, ded);
-    }
-
-    [trips, threshold, deduct].forEach(el => el.addEventListener('input', recalc));
+    document.getElementById('trips').addEventListener('input', e => {
+      const n = Number(e.target.value);
+      const res = calculate(n);
+      render(res, n);
+    });
   </script>
 </body>
 </html>
