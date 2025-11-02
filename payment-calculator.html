@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Калькулятор выплат (точные ставки)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial; padding:20px; color:#111; }
+    h1 { font-size:20px; margin-bottom:5px; }
+    .card { border:1px solid #ddd; border-radius:8px; padding:12px; margin-top:10px; background:#fff; }
+    input[type=number] { width:120px; padding:6px; font-size:16px; }
+    table { width:100%; border-collapse:collapse; margin-top:10px; }
+    th, td { border:1px solid #eee; padding:6px; text-align:left; font-size:14px; }
+    .right { text-align:right; }
+    .muted { color:#666; font-size:13px; }
+    .big { font-weight:700; font-size:18px; }
+    .ok { color:green; font-weight:700; }
+  </style>
+</head>
+<body>
+  <h1>Калькулятор выплат (точные ставки)</h1>
+  <div class="card">
+    <div class="muted">Введите количество поездок. Если всего ≥ 250 — расчёт пойдёт ступенчато по твоей таблице.</div>
+    <div style="margin-top:10px">
+      <label>Количество поездок: <input id="trips" type="number" min="0" value="442"></label>
+    </div>
+    <div id="result" style="margin-top:12px"></div>
+  </div>
+
+  <script>
+    const threshold = 250;
+    const tiers = [
+      {start: 1, end: 299, rate: 1.70},
+      {start: 300, end: 399, rate: 1.80},
+      {start: 400, end: 499, rate: 2.00},
+      {start: 500, end: 599, rate: 2.20},
+      {start: 600, end: Infinity, rate: 2.50}
+    ];
+
+    function calculate(n) {
+      n = Math.floor(Number(n) || 0);
+      if (n < threshold) {
+        return {paid: false, total: 0, breakdown: [], after8: 0};
+      }
+      let total = 0;
+      const breakdown = [];
+      for (const t of tiers) {
+        const lower = Math.max(t.start, 1);
+        const upper = Math.min(n, t.end);
+        if (upper >= lower) {
+          const count = upper - lower + 1;
+          const sum = +(count * t.rate).toFixed(2);
+          total += sum;
+          breakdown.push({range: t.start + "–" + (t.end === Infinity ? (">= " + t.start) : t.end),
+                          count, rate: t.rate, sum});
+        }
+        if (upper === n) break;
+      }
+      total = +total.toFixed(2);
+      const after8 = +(total * 0.92).toFixed(2);
+      return {paid: true, total, breakdown, after8};
+    }
+
+    function render(res, n) {
+      const div = document.getElementById('result');
+      if (!res.paid) {
+        div.innerHTML = '<div class="muted big">Всего поездок: ' + n + ' — меньше ' + threshold + ' → оплата не начисляется.</div>';
+        return;
+      }
+      let html = '<div class="muted">Всего поездок: <b>' + n + '</b></div>';
+      html += '<table><thead><tr><th>Диапазон</th><th>Кол-во</th><th>Ставка (PLN)</th><th class="right">Сумма (PLN)</th></tr></thead><tbody>';
+      for (const b of res.breakdown) {
+        html += '<tr><td>' + b.range + '</td>'
+             + '<td>' + b.count + '</td>'
+             + '<td>' + b.rate.toFixed(2) + '</td>'
+             + '<td class="right">' + b.sum.toFixed(2) + '</td></tr>';
+      }
+      html += '</tbody></table>';
+      html += '<div style="margin-top:8px" class="big">Общая сумма: <span class="ok">' + res.total.toFixed(2) + ' PLN</span></div>';
+      html += '<div class="muted">Вычесть 8%: ' + ( (res.total - res.after8).toFixed(2) ) + ' PLN</div>';
+      html += '<div class="big">Итого после вычета 8%: ' + res.after8.toFixed(2) + ' PLN</div>';
+      div.innerHTML = html;
+    }
+
+    document.getElementById('trips').addEventListener('input', e => {
+      const n = Number(e.target.value);
+      const res = calculate(n);
+      render(res, n);
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const n = Number(document.getElementById('trips').value);
+      const res = calculate(n);
+      render(res, n);
+    });
+  </script>
+</body>
+</html>
